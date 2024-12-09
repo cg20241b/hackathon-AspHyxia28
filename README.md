@@ -66,3 +66,7 @@ This project demonstrates custom vertex and fragment shaders using Three.js in a
 - Verify that the ambient, diffuse, and specular components are visually distinguishable and aligned with the specified materials (plastic vs. metal appearance).
 
 After completing all requirements, your final project should showcase a properly lit scene with custom shader materials, a dynamic light source, and interactive controls for both the light and camera.
+
+
+P.S
+(So, the light is stuck in front of the cube. When I try to change for example the alphabet from (-10, 0, 0) to (-1, 0, 0), there's indeed a light because there's shadow casted from the alphabet, so.....)
