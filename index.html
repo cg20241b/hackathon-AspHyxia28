@@ -2,7 +2,8 @@
 <html lang="en"></html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="""width=device-width, initial-scale=""1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>3D Scene Composition</title>
     <style>
         body { margin: 0; }
@@ -20,18 +21,39 @@
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer();
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // Point light source
-        const pointLight = new THREE.PointLight(0xffffff, 1, 100);
-        pointLight.position.set(0, 0, 0);
-        scene.add(pointLight);
+        // Ambient light
+        const ambientLight = new THREE.AmbientLight(0x404040); // Soft white light
+        scene.add(ambientLight);
 
         // Central cube (light source)
         const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
-        const cubeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const cubeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // White color
         const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+        cube.castShadow = true;
         scene.add(cube);
+
+        // Point light source inside the cube
+        const pointLight = new THREE.PointLight(0xffffff, 5, 200); // Increased intensity to 5 and distance to 200
+        pointLight.position.set(0, 0, 0); // Centered inside the cube
+        pointLight.castShadow = true; // Light casts shadow
+        pointLight.shadow.radius = 20; // Increase shadow radius
+        scene.add(pointLight);
+
+        // Update light position when the cube moves
+        function updateLightPosition() {
+            pointLight.position.set(cube.position.x, cube.position.y, cube.position.z);
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            updateLightPosition();
+            renderer.render(scene, camera);
+        }
+        animate();
 
         // Load font and create text meshes
         const loader = new THREE.FontLoader();
@@ -39,12 +61,17 @@
             const alphabet = 'i'; // Replace with the last alphabet character of your name
             const digit = '8'; // Replace with the last digit of your student ID
 
+            const textMaterial = new THREE.MeshPhongMaterial({ color: 0xffffff });
+
             const alphabetGeometry = new THREE.TextGeometry(alphabet, {
                 font: font,
                 size: 5,
                 height: 1,
                 curveSegments: 12,
-                bevelEnabled: false
+                bevelEnabled: true,
+                bevelThickness: 0.5,
+                bevelSize: 0.09,
+                bevelSegments: 10
             });
             const digitGeometry = new THREE.TextGeometry(digit, {
                 font: font,
@@ -63,9 +90,7 @@
                     ambientIntensity: { value: ambientIntensity },
                     diffuseColor: { value: new THREE.Color('#79CEE0') }, // Replace with your favorite color
                     specularColor: { value: new THREE.Color(0xffffff) },
-                    shininess: { value: 30.0 },
-                    pointLightPosition: { value: new THREE.Vector3(10, 10, 10) },
-                    pointLightColor: { value: new THREE.Color(0xffffff) }
+                    shininess: { value: 30.0 }
                 },
                 vertexShader: `
                     varying vec3 vNormal;
@@ -83,11 +108,10 @@
                     uniform vec3 diffuseColor;
                     uniform vec3 specularColor;
                     uniform float shininess;
-                    uniform vec3 pointLightPosition;
-                    uniform vec3 pointLightColor;
                     varying vec3 vNormal;
                     varying vec3 vPosition;
                     void main() {
+                        // Ambient component
                         vec3 ambient = ambientIntensity * diffuseColor;
 
                         // Diffuse component
@@ -101,16 +125,8 @@
                         float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
                         vec3 specular = spec * specularColor;
 
-                        // Point light calculations
-                        vec3 pointLightDir = normalize(pointLightPosition - vPosition);
-                        float pointDiff = max(dot(vNormal, pointLightDir), 0.0);
-                        vec3 pointDiffuse = pointDiff * pointLightColor;
-                        vec3 pointReflectDir = reflect(-pointLightDir, vNormal);
-                        float pointSpec = pow(max(dot(viewDir, pointReflectDir), 0.0), shininess);
-                        vec3 pointSpecular = pointSpec * pointLightColor;
-
                         // Combine all components
-                        gl_FragColor = vec4(ambient + diffuse + specular + pointDiffuse + pointSpecular, 1.0);
+                        gl_FragColor = vec4(ambient + diffuse + specular, 1.0);
                     }
                 `
             });
@@ -122,9 +138,7 @@
                     ambientIntensity: { value: ambientIntensity },
                     diffuseColor: { value: new THREE.Color(0xff0000) }, // Replace with the complementary color
                     specularColor: { value: new THREE.Color(0xff0000) },
-                    shininess: { value: 100.0 },
-                    pointLightPosition: { value: new THREE.Vector3(10, 10, 10) },
-                    pointLightColor: { value: new THREE.Color(0xffffff) }
+                    shininess: { value: 100.0 }
                 },
                 vertexShader: `
                     varying vec3 vNormal;
@@ -132,21 +146,20 @@
                     void main() {
                         // Pass the normal and position to the fragment shader
                         vNormal = normalize(normalMatrix * normal);
-                        vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
+                        vPosition = vec3(modelViewMatrix * vec4(position, 1.0));
                         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
                     }
                 `,
                 fragmentShader: `
-                    varying vec3 vNormal;
-                    varying vec3 vPosition;
                     uniform vec3 lightPosition;
                     uniform float ambientIntensity;
                     uniform vec3 diffuseColor;
                     uniform vec3 specularColor;
                     uniform float shininess;
-                    uniform vec3 pointLightPosition;
-                    uniform vec3 pointLightColor;
+                    varying vec3 vNormal;
+                    varying vec3 vPosition;
                     void main() {
+                        // Ambient component
                         vec3 ambient = ambientIntensity * diffuseColor;
 
                         // Diffuse component
@@ -154,29 +167,26 @@
                         float diff = max(dot(vNormal, lightDir), 0.0);
                         vec3 diffuse = diff * diffuseColor;
 
-                        // Specular component (Plastic-like)
+                        // Specular component (Metal-like)
                         vec3 viewDir = normalize(-vPosition);
                         vec3 reflectDir = reflect(-lightDir, vNormal);
                         float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
                         vec3 specular = spec * specularColor;
 
-                        // Point light calculations
-                        vec3 pointLightDir = normalize(pointLightPosition - vPosition);
-                        float pointDiff = max(dot(vNormal, pointLightDir), 0.0);
-                        vec3 pointDiffuse = pointDiff * pointLightColor;
-                        vec3 pointReflectDir = reflect(-pointLightDir, vNormal);
-                        float pointSpec = pow(max(dot(viewDir, pointReflectDir), 0.0), shininess);
-                        vec3 pointSpecular = pointSpec * pointLightColor;
-
                         // Combine all components
-                        gl_FragColor = vec4(ambient + diffuse + specular + pointDiffuse + pointSpecular, 1.0);
+                        gl_FragColor = vec4(ambient + diffuse + specular, 1.0);
                     }
                 `
             });
 
             const alphabetMesh = new THREE.Mesh(alphabetGeometry, alphabetMaterial);
             const digitMesh = new THREE.Mesh(digitGeometry, digitMaterial);
+            
+            alphabetMesh.castShadow = true; // Alphabet casts shadow
+            alphabetMesh.receiveShadow = true; // Alphabet receives shadow
 
+            digitMesh.castShadow = true; // Digit casts shadow
+            digitMesh.receiveShadow = true; // Digit receives shadow
             alphabetMesh.position.set(-10, 0, 0);
             digitMesh.position.set(10, 0, 0);
 
@@ -190,7 +200,6 @@
         // Render loop
         function animate() {
             requestAnimationFrame(animate);
-            
             renderer.render(scene, camera);
         }
         animate();
